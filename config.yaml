@@ -1,0 +1,10 @@
+# config.yaml
+# Map each WebSocket endpoint name (used in the URL path) to a serial port.
+# This is the config I actually use - MacN is a USB-attached Meshtastic Node.
+
+bind_address: "0.0.0.0"
+bind_port: 4400
+endpoints:
+  MacN:
+    port: "/dev/ttyACM0"
+    baud_rate: 115200
