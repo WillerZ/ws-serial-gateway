@@ -1,10 +1,26 @@
 # config.yaml
 # Map each WebSocket endpoint name (used in the URL path) to a serial port.
+
+# In the spirit of being safe by default, the published config onlu listens
+# on the local address and exposes no serial ports.
+bind_address: "127.0.0.1"
+bind_port: 4400
+# endpoints:
+#   LinuxExample:
+#     port: "/dev/ttyACM0" 
+#     baud_rate: 115200
+#   WindowsExample:
+#     port: "COM5" 
+#     baud_rate: 115200
+#   macosExample:
+#     port: "/dev/tty.usbserial-A6004byf" 
+#     baud_rate: 115200
+
 # This is the config I actually use - MacN is a USB-attached Meshtastic Node.
 
-bind_address: "0.0.0.0"
-bind_port: 4400
-endpoints:
-  MacN:
-    port: "/dev/ttyACM0"
-    baud_rate: 115200
+# bind_address: "0.0.0.0"  # Listen on all interfaces; I trust my LAN
+# bind_port: 4400
+# endpoints:
+#   MacN:                  # This is the short name of a Meshtastic node
+#     port: "/dev/ttyACM0" # This is the device it's attached to
+#     baud_rate: 19200     # Seems to work better than 115200

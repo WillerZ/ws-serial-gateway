@@ -1,7 +1,7 @@
 // src/main.rs
 use anyhow::{Context, Result};
 use futures::{SinkExt, StreamExt};
-use log::{error, info};
+use log::{error, info, trace};
 use serde::Deserialize;
 use std::{
     collections::HashMap, sync::Arc, time::Duration
@@ -162,8 +162,6 @@ async fn handle_connection(
         let readable_serial_port = Arc::clone(&mutexed_serial_port);
         let tx = serial_to_ws_tx.clone();
         tokio::spawn(async move {
-            // We use a small buffer and block on the read in a blocking thread.
-            let mut buf = [0u8; 1024];
             let readable_serial_port = readable_serial_port;
             loop {
                 // Read from serial in a blocking fashion.
@@ -171,20 +169,26 @@ async fn handle_connection(
                 let read_result = tokio::task::spawn_blocking(move || {
                     let mut ser = blockable_serial_port.blocking_lock();
                     let ser = ser.as_mut();
-                    ser.read(&mut buf)
+                    let mut buf = [0u8; 1024];
+                    let rr= ser.read(&mut buf);
+                    rr.map(move |n|{
+                        buf[..n].to_vec()
+                    })
                     }).await;
-                let n: usize = match read_result {
+                let vec = match read_result {
                     Ok(Ok(cnt)) => cnt,
                     Ok(Err(_)) => {break;},
                     Err(_) => {break;},
                 };
-                if n == 0 {
+                if vec.len() == 0 {
                     // EOF (should not normally happen on serial ports)
                     continue;
                 }
+                trace!("Web < {} bytes < Serial", vec.len());
                 // Forward the bytes as a binary WebSocket message.
-                if tx.send(Message::Binary(buf[..n].to_vec())).is_err() {
+                if tx.send(Message::Binary(vec)).is_err() {
                     // Receiver has been dropped – connection closed.
+                    info!("Web side closed, exiting reader");
                     break;
                 }
             }
@@ -200,13 +204,17 @@ async fn handle_connection(
                 match msg {
                     Ok(Message::Binary(bytes)) => {
                         let blockable_serial_port = Arc::clone(&writable_serial_port);
+                        let n = bytes.len();
                         let write_result = tokio::task::spawn_blocking(move || {
                             let mut ser = blockable_serial_port.blocking_lock();
                             let ser = ser.as_mut();
                             ser.write_all(&bytes)
                             }).await;
                         match write_result {
-                            Ok(Ok(_)) => {continue;}
+                            Ok(Ok(_)) => {
+                                trace!("Web > {} bytes > Serial", n);
+                                continue;
+                            }
                             Ok(Err(_)) => {break;}
                             Err(_) => {break;}
                         }
@@ -214,6 +222,7 @@ async fn handle_connection(
                     Ok(Message::Text(text)) => {
                         // Convert text messages to bytes if needed.
                         let bytes = text.into_bytes();
+                        let n = bytes.len();
                         // Write to serial (blocking)
                         let blockable_serial_port = Arc::clone(&writable_serial_port);
                         let write_result = tokio::task::spawn_blocking(move || {
@@ -222,7 +231,10 @@ async fn handle_connection(
                             ser.write_all(&bytes)
                             }).await;
                         match write_result {
-                            Ok(Ok(_)) => {continue;}
+                            Ok(Ok(_)) => {
+                                trace!("Web[text] > {} bytes > Serial", n);
+                                continue;
+                            }
                             Ok(Err(_)) => {break;}
                             Err(_) => {break;}
                         }
