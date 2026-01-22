@@ -3,9 +3,8 @@ use anyhow::{Context, Result};
 use futures::{SinkExt, StreamExt};
 use log::{error, info};
 use serde::Deserialize;
-use serialport::SerialPort;
 use std::{
-    collections::HashMap, io::{Read, Write}, sync::Arc, time::Duration
+    collections::HashMap, sync::Arc, time::Duration
 };
 use tokio::{
     net::TcpListener,
@@ -168,18 +167,16 @@ async fn handle_connection(
             let readable_serial_port = readable_serial_port;
             loop {
                 // Read from serial in a blocking fashion.
-                let read_result= {
-                    let mut ser = readable_serial_port.lock().await;
+                let blockable_serial_port = Arc::clone(&readable_serial_port);
+                let read_result = tokio::task::spawn_blocking(move || {
+                    let mut ser = blockable_serial_port.blocking_lock();
                     let ser = ser.as_mut();
                     ser.read(&mut buf)
-                };
-                let n = match read_result
-                {
-                    Ok(cnt) => cnt,
-                    Err(e) => {
-                        error!("Serial read error: {:#}", e);
-                        break;
-                    }
+                    }).await;
+                let n: usize = match read_result {
+                    Ok(Ok(cnt)) => cnt,
+                    Ok(Err(_)) => {break;},
+                    Err(_) => {break;},
                 };
                 if n == 0 {
                     // EOF (should not normally happen on serial ports)
@@ -202,30 +199,32 @@ async fn handle_connection(
             while let Some(msg) = ws_rx.next().await {
                 match msg {
                     Ok(Message::Binary(bytes)) => {
-                        let write_result = {
-                            let mut ser = writable_serial_port.lock().await;
+                        let blockable_serial_port = Arc::clone(&writable_serial_port);
+                        let write_result = tokio::task::spawn_blocking(move || {
+                            let mut ser = blockable_serial_port.blocking_lock();
                             let ser = ser.as_mut();
-                            let data = bytes.clone();
-                            ser.write_all(&data)
-                        };
-                        if write_result.is_err() {
-                            // Error writing to serial port.
-                            break;
+                            ser.write_all(&bytes)
+                            }).await;
+                        match write_result {
+                            Ok(Ok(_)) => {continue;}
+                            Ok(Err(_)) => {break;}
+                            Err(_) => {break;}
                         }
                     }
                     Ok(Message::Text(text)) => {
                         // Convert text messages to bytes if needed.
                         let bytes = text.into_bytes();
                         // Write to serial (blocking)
-                        let write_result = {
-                            let mut ser = writable_serial_port.lock().await;
+                        let blockable_serial_port = Arc::clone(&writable_serial_port);
+                        let write_result = tokio::task::spawn_blocking(move || {
+                            let mut ser = blockable_serial_port.blocking_lock();
                             let ser = ser.as_mut();
-                            let data = bytes.clone();
-                            ser.write_all(&data)
-                        };
-                        if write_result.is_err() {
-                            // Error writing to serial port.
-                            break;
+                            ser.write_all(&bytes)
+                            }).await;
+                        match write_result {
+                            Ok(Ok(_)) => {continue;}
+                            Ok(Err(_)) => {break;}
+                            Err(_) => {break;}
                         }
                     }
                     Ok(Message::Close(_)) => {
