@@ -5,7 +5,7 @@ use log::{error, info};
 use serde::Deserialize;
 use serialport::SerialPort;
 use std::{
-    collections::HashMap, io::{Read, Write}, path, sync::Arc, time::Duration
+    collections::HashMap, io::{Read, Write}, sync::Arc, time::Duration
 };
 use tokio::{
     net::TcpListener,
@@ -116,7 +116,7 @@ async fn handle_connection(
     let mut ws_endpoint: String = "".to_string();
     // Perform the WebSocket handshake – we need the request URI to know the endpoint name.
     let ws_stream = {
-        let mut cb = |req: &http::Request<()>, resp: http::Response<()>| {
+        let cb = |req: &http::Request<()>, resp: http::Response<()>| {
         // Extract the request path (e.g. "/mydevice")
         ws_endpoint = req.uri().path().trim_start_matches('/').to_string();
         port_cfg = cfg
@@ -170,7 +170,7 @@ async fn handle_connection(
                 // Read from serial in a blocking fashion.
                 let read_result= {
                     let mut ser = readable_serial_port.lock().await;
-                    let mut ser = ser.as_mut();
+                    let ser = ser.as_mut();
                     ser.read(&mut buf)
                 };
                 let n = match read_result
@@ -204,7 +204,7 @@ async fn handle_connection(
                     Ok(Message::Binary(bytes)) => {
                         let write_result = {
                             let mut ser = writable_serial_port.lock().await;
-                            let mut ser = ser.as_mut();
+                            let ser = ser.as_mut();
                             let data = bytes.clone();
                             ser.write_all(&data)
                         };
@@ -219,7 +219,7 @@ async fn handle_connection(
                         // Write to serial (blocking)
                         let write_result = {
                             let mut ser = writable_serial_port.lock().await;
-                            let mut ser = ser.as_mut();
+                            let ser = ser.as_mut();
                             let data = bytes.clone();
                             ser.write_all(&data)
                         };
