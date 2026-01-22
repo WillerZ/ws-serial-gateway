@@ -2,21 +2,31 @@
 
 A tiny **WebSocket‑to‑Serial‑Port gateway** written in Rust.
 
-* A client connects to `ws://<host>:9001/<endpoint>`
+* A client connects to `ws://<host>:<port>/<endpoint>`
 * The gateway opens the serial device configured for `<endpoint>` and
   forwards all data **both ways**.
-* Errors are logged to standard output.
-* The program shuts down cleanly on `Ctrl‑C`.
 
 ## Features
 
 | Feature | Description |
 | ------- | ----------- |
 | Cross‑platform | Works on Windows, Linux and macOS |
-| Asynchronous I/O | Powered by Tokio for high‑throughput handling |
 | Simple configuration | YAML file mapping endpoint names to serial ports and baud rates |
-| Graceful shutdown | Handles `SIGINT` (`Ctrl‑C`) and closes all ports cleanly |
 | MIT licensed | Free to use, modify and distribute |
+
+## Safety and Security
+
+Do not expose this service to untrusted networks.
+
+I am not interested in adding TLS to this software directly. Serve this behind a
+reverse proxy (e.g. nginx) that can handle TLS termination, access control, etc.
+
+## Scalability
+
+Each serial port is still a serial port. That means it's inherently a single-
+user device, and you can only have one client connected to it at a time. If
+another program on your server is accessing the same serial port, do not expect
+to be able to connect via this server at the same time.
 
 ## Getting started
 
@@ -31,17 +41,8 @@ You know what to do.
 
 ### Configuration
 
-Create (or edit) `config.yaml` in the project root:
-
-```yaml
-endpoints:
-  mydevice:
-    port: "/dev/ttyUSB0"   # or "COM4" on Windows
-    baud_rate: 115200
-```
-
-*The key under `endpoints` (`mydevice` in the example) becomes the WebSocket
-path.*
+Edit `config.yaml` in the project root to configure your server endpoint and
+serial devices.
 
 ### Build and run
 
@@ -49,15 +50,15 @@ path.*
 cargo run --release
 ```
 
-The server will listen on `0.0.0.0:9001`.  
-Open a WebSocket client to `ws://localhost:9001/mydevice` (replace `mydevice`
-with the endpoint you defined).
+The server will listen on the configured IP and port.  
+Open a WebSocket client to `ws://<host>:<port>/mydevice` (replace `mydevice`
+with an endpoint you defined).
 
 ### Example client (Node.js)
 
 ```js
 const WebSocket = require('ws');
-const ws = new WebSocket('ws://localhost:9001/mydevice');
+const ws = new WebSocket('ws://127.0.0.1:4400/mydevice');
 
 ws.binaryType = 'arraybuffer';
 
@@ -74,9 +75,9 @@ ws.on('message', data => {
 
 ### Stopping the server
 
-Press **Ctrl‑C** in the terminal where `cargo run` is executing. The gateway
-will close all open serial ports and exit cleanly.
+Press **Ctrl‑C** in the terminal where `cargo run` is executing or send SIGINT
+to the process.
 
 ## License
 
-This project is licensed under the MIT License – see the `LICENSE` file for details.
+This software is licensed under the MIT License – see the `LICENSE` file for details.
